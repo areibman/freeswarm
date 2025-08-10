@@ -9,6 +9,7 @@ import { initDatabase } from './config/database';
 import { WebSocketService } from './services/websocket.service';
 import { PullRequestsController } from './controllers/pullRequests.controller';
 import { WebhooksController } from './controllers/webhooks.controller';
+import { AuthController } from './controllers/auth.controller';
 import { CacheService } from './services/cache.service';
 
 // Load environment variables
@@ -25,6 +26,7 @@ const wsService = new WebSocketService(server);
 // Initialize controllers
 const pullRequestsController = new PullRequestsController(wsService);
 const webhooksController = new WebhooksController(wsService);
+const authController = new AuthController();
 const cacheService = new CacheService();
 
 // Middleware
@@ -89,7 +91,13 @@ app.put('/api/user/preferences', (req, res) => {
   res.json({ success: true, preferences: req.body });
 });
 
-// Repositories endpoint
+// Authentication endpoints
+app.get('/api/auth/user', (req, res) => authController.getCurrentUser(req, res));
+app.get('/api/auth/repositories', (req, res) => authController.getUserRepositories(req, res));
+app.post('/api/auth/repositories', (req, res) => authController.saveUserRepositories(req, res));
+app.get('/api/auth/users/:userId/repositories', (req, res) => authController.getUserSavedRepositories(req, res));
+
+// Repositories endpoint (legacy - kept for compatibility)
 app.get('/api/repositories', async (req, res) => {
   try {
     const { GitHubService } = await import('./services/github.service');

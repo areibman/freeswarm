@@ -292,7 +292,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     });
 
     // Handle webhook events
-    socket.on('webhook:pr', (data: any) => {
+    socket.on('webhook:pr', (data: { type: string; payload: unknown }) => {
       console.log('Webhook PR event:', data);
       // Refresh data on webhook events
       fetchPullRequests();

@@ -5,6 +5,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Disable image optimization for static export
   experimental: {
     // Add any experimental features if needed

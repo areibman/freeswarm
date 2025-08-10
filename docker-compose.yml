@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # Backend Service
+  backend:
+    container_name: freeswarm-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Persist database and logs
+      - ./backend/data:/app/data
+      - ./backend/logs:/app/logs
+    networks:
+      - freeswarm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service
+  frontend:
+    container_name: freeswarm-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-http://localhost:3001}
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env.local
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - freeswarm-network
+    restart: unless-stopped
+
+networks:
+  freeswarm-network:
+    driver: bridge
+
+volumes:
+  backend-data:
+  backend-logs:

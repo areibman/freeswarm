@@ -62,7 +62,7 @@ interface UseGitHubDataOptions {
   accessToken?: string;
 }
 
-interface UseGitHubDataReturn {
+export interface UseGitHubDataReturn {
   pullRequests: PullRequest[];
   repositories: Repository[];
   loading: boolean;
@@ -148,6 +148,11 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
 
   // Fetch repositories list
   const fetchRepositories = useCallback(async () => {
+    // Skip fetching if no repositories are configured
+    if (repositories.length === 0) {
+      return;
+    }
+    
     try {
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -168,7 +173,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     } catch (err) {
       console.error('Error fetching repositories:', err);
     }
-  }, [accessToken]);
+  }, [accessToken, repositories.length]);
 
   // Update PR status
   const updatePRStatus = useCallback(async (
@@ -319,8 +324,11 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
   // Initial fetch
   useEffect(() => {
     fetchPullRequests();
-    fetchRepositories();
-  }, [fetchPullRequests, fetchRepositories]);
+    // Only fetch repositories if we have repositories configured (not in mock mode)
+    if (repositories.length > 0) {
+      fetchRepositories();
+    }
+  }, [fetchPullRequests, fetchRepositories, repositories.length]);
 
   return {
     pullRequests,

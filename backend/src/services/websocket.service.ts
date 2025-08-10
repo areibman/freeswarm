@@ -49,7 +49,7 @@ export class WebSocketService {
       // Handle PR status updates
       socket.on('pr:update_status', (data: { prId: string; status: string }) => {
         // Broadcast to all clients in the same repository
-        this.broadcastPRUpdate(data.prId, { status: data.status });
+        this.broadcastPRUpdate(data.prId, { status: data.status as 'draft' | 'open' | 'closed' | 'merged' });
       });
     });
   }

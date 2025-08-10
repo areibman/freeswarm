@@ -64,10 +64,11 @@ export function PRManager() {
     }
   }
   
-  const allExpanded = expandedIssues.size === issues.length
+  const allExpanded = issues && expandedIssues.size === issues.length
   const allCollapsed = expandedIssues.size === 0
   
   const toggleAllIssues = () => {
+    if (!issues) return
     if (allExpanded || (!allExpanded && !allCollapsed)) {
       // Collapse all
       setExpandedIssues(new Set())

@@ -19,9 +19,9 @@ export interface PullRequest {
   liveLink?: string
   sshLink?: string
   githubUrl?: string
-  model: string | null
-  sourceAgent: string | null
-  logs: string
+  model?: string | null
+  sourceAgent?: string | null
+  logs?: string
   issueId?: string
   status: PullRequestStatus
   description: string
@@ -29,17 +29,22 @@ export interface PullRequest {
   created: string
   updateLogs: UpdateLog[]
   fileChanges: FileChange[]
-  // GitHub API specific fields (for future integration)
+  // GitHub API specific fields
   number?: number
   title?: string
-  author?: {
+  baseBranch?: string
+  author?: string | {
     login: string
     avatarUrl?: string
   }
-  repository?: {
+  repository?: string | {
     owner: string
     name: string
   }
+  reviewers?: string[]
+  labels?: string[]
+  comments?: number
+  commits?: number
 }
 
 export interface Issue {

@@ -26,7 +26,7 @@ export function PullRequestCard({
   onScrollToIssue,
   className = ''
 }: PullRequestCardProps) {
-  const [activeTab, setActiveTab] = useState<'description' | 'files' | 'history' | null>(null)
+  const [activeTab, setActiveTab] = useState<'description' | 'files' | 'history' | 'preview' | 'logs' | null>(null)
   const [copiedBranch, setCopiedBranch] = useState(false)
   
   const fileStats = calculateFileChanges(pr.fileChanges)
@@ -37,7 +37,7 @@ export function PullRequestCard({
     setTimeout(() => setCopiedBranch(false), 2000)
   }
   
-  const toggleTab = (tab: 'description' | 'files' | 'history') => {
+  const toggleTab = (tab: 'description' | 'files' | 'history' | 'preview' | 'logs') => {
     setActiveTab(current => current === tab ? null : tab)
   }
   
@@ -97,71 +97,8 @@ export function PullRequestCard({
             </div>
           </div>
           
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            {/* Model */}
-            <div>
-              <span className="text-muted-foreground uppercase block text-[10px]">MODEL</span>
-              <span className="font-medium">
-                {pr.model || '[PENDING]'}
-              </span>
-            </div>
-            
-            {/* Agent */}
-            <div>
-              <span className="text-muted-foreground uppercase block text-[10px]">AGENT</span>
-              {pr.sourceAgent ? (
-                <button
-                  onClick={() => onScrollToIssue?.(pr.issueId || '')}
-                  className="font-medium hover:underline"
-                  title="Scroll to Issue"
-                >
-                  {pr.sourceAgent}
-                </button>
-              ) : (
-                <span className="font-medium">[PENDING]</span>
-              )}
-            </div>
-            
-            {/* Live Link */}
-            <div>
-              <span className="text-muted-foreground uppercase block text-[10px]">PREVIEW</span>
-              {pr.liveLink ? (
-                <a
-                  href={pr.liveLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 hover:underline font-medium"
-                >
-                  <span>LIVE</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : (
-                <span className="font-medium">[N/A]</span>
-              )}
-            </div>
-            
-            {/* Logs */}
-            <div>
-              <span className="text-muted-foreground uppercase block text-[10px]">LOGS</span>
-              {pr.logs ? (
-                <a
-                  href={pr.logs}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 hover:underline font-medium"
-                >
-                  <span>VIEW</span>
-                  <FileText className="h-3 w-3" />
-                </a>
-              ) : (
-                <span className="font-medium">[N/A]</span>
-              )}
-            </div>
-          </div>
-          
           {/* Action Buttons */}
-          <div className="flex gap-2 mt-3 border-t border-foreground/20 pt-2">
+          <div className="flex gap-2 mt-3 border-t border-foreground/20 pt-2 flex-wrap">
             <button
               onClick={() => toggleTab('description')}
               className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
@@ -200,6 +137,30 @@ export function PullRequestCard({
             >
               <History className="h-3 w-3" />
               History ({pr.updateLogs.length})
+            </button>
+            <button
+              onClick={() => toggleTab('preview')}
+              className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
+                activeTab === 'preview'
+                  ? 'bg-foreground text-background border-foreground'
+                  : 'text-muted-foreground hover:text-foreground border-foreground/20'
+              }`}
+              disabled={!pr.liveLink}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Preview
+            </button>
+            <button
+              onClick={() => toggleTab('logs')}
+              className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
+                activeTab === 'logs'
+                  ? 'bg-foreground text-background border-foreground'
+                  : 'text-muted-foreground hover:text-foreground border-foreground/20'
+              }`}
+              disabled={!pr.logs}
+            >
+              <FileText className="h-3 w-3" />
+              Logs
             </button>
           </div>
           
@@ -246,6 +207,50 @@ export function PullRequestCard({
                       <span className="text-muted-foreground">@{log.user}</span>
                     </div>
                   ))}
+                </div>
+              )}
+              
+              {/* Preview Content */}
+              {activeTab === 'preview' && (
+                <div className="text-xs">
+                  {pr.liveLink ? (
+                    <div className="flex items-center gap-2">
+                      <span>Live preview available at:</span>
+                      <a
+                        href={pr.liveLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 hover:underline font-medium text-blue-600 dark:text-blue-400"
+                      >
+                        {pr.liveLink}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">No preview available</span>
+                  )}
+                </div>
+              )}
+              
+              {/* Logs Content */}
+              {activeTab === 'logs' && (
+                <div className="text-xs">
+                  {pr.logs ? (
+                    <div className="flex items-center gap-2">
+                      <span>View logs at:</span>
+                      <a
+                        href={pr.logs}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 hover:underline font-medium text-blue-600 dark:text-blue-400"
+                      >
+                        {pr.logs}
+                        <FileText className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">No logs available</span>
+                  )}
                 </div>
               )}
             </div>

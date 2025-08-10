@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PR Manager - Agent Competition Tracker",
+  title: "Freeswarm - Multi-Agent Competition Tracker",
   description: "Track and manage pull requests from competing AI agents",
 };
 

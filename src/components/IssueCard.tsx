@@ -87,9 +87,16 @@ export function IssueCard({
               {issue.pullRequests.length} COMPETING PR{issue.pullRequests.length !== 1 ? 'S' : ''}
             </span>
             {uniqueAgents.length > 0 && (
-              <span className="text-[10px] text-muted-foreground">
-                {uniqueAgents.join(' • ')}
-              </span>
+              <div className="flex items-center gap-2">
+                {uniqueAgents.map((agent, idx) => (
+                  <span 
+                    key={idx}
+                    className="text-[10px] font-semibold uppercase px-2 py-0.5 bg-foreground text-background border border-foreground"
+                  >
+                    {agent}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </div>

@@ -191,8 +191,8 @@ export function PRManager() {
         <div className="mb-4 border-b border-foreground pb-2">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-bold uppercase tracking-wider">PR MANAGER</h1>
-              <p className="text-muted-foreground text-xs">AGENT COMPETITION TRACKER V1.0</p>
+              <h1 className="text-lg font-bold uppercase tracking-wider">Freeswarm</h1>
+              <p className="text-muted-foreground text-xs">Multi-Agent PR Competition Tracker</p>
             </div>
             <div className="flex items-center gap-3">
               {hasSelection && (

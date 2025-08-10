@@ -14,6 +14,7 @@ export interface GitHubConfig {
     token?: string
     owner: string
     repo: string
+    repositories?: string[]
   }
   autoRefresh?: boolean
   refreshInterval?: number
@@ -106,7 +107,7 @@ export function GitHubProvider({
   const loading = config.mode === 'mock' ? mockLoading : githubData.loading
   const error = config.mode === 'mock' ? mockError : githubData.error
   const refresh = config.mode === 'mock' ? fetchMockData : githubData.refresh
-  const updatePRStatus = config.mode === 'mock' 
+  const updatePRStatus = useMemo(() => config.mode === 'mock' 
     ? async (owner: string, repo: string, prNumber: number, action: 'close' | 'reopen' | 'merge') => {
         // In mock mode, find PR by number and update its status
         const pr = mockPullRequests.find(p => p.number === prNumber)
@@ -122,7 +123,7 @@ export function GitHubProvider({
           setMockPullRequests(prev => prev.map(p => p.id === pr.id ? updatedPR : p))
         }
       }
-    : githubData.updatePRStatus
+    : githubData.updatePRStatus, [config.mode, mockPullRequests, service, setMockPullRequests, githubData.updatePRStatus])
   
   // Group pull requests by issues
   const issues = useMemo(() => {
@@ -145,7 +146,7 @@ export function GitHubProvider({
     })
     
     return Array.from(issueMap.values())
-  }, [githubData.pullRequests])
+  }, [pullRequests])
   
   // Create wrapper for updatePullRequestStatus
   const updatePullRequestStatus = useMemo(() => async (prId: string, status: PullRequest['status']) => {

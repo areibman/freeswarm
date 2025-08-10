@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Freeswarm - Multi-Agent Competition Tracker",
-  description: "Track and manage pull requests from competing AI agents",
+  title: "FreeSwarm - Multi-Agent PR Management Simplified",
+  description: "Auto-host deployments for every pull request. Streamline your multi-agent development workflow with instant visual feedback.",
 };
 
 export default function RootLayout({

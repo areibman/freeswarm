@@ -39,6 +39,8 @@ interface GitHubContextValue {
   // Context-specific properties
   config: GitHubConfig
   service: GitHubService
+  selectedRepositories: string[]
+  reloadSelectedRepositories: () => Promise<void>
 }
 
 const GitHubContext = createContext<GitHubContextValue | undefined>(undefined)
@@ -52,6 +54,8 @@ export function GitHubProvider({
   children, 
   config = { mode: 'mock' } 
 }: GitHubProviderProps) {
+  const [selectedRepositories, setSelectedRepositories] = useState<string[]>([])
+
   // Create the appropriate service based on config
   const service = React.useMemo(() => {
     if (config.mode === 'api' && config.apiConfig) {
@@ -60,14 +64,35 @@ export function GitHubProvider({
     return new MockGitHubService()
   }, [config.mode, config.apiConfig])
   
+  // Load selected repositories from backend session
+  const reloadSelectedRepositories = useCallback(async () => {
+    if (config.mode !== 'api') return
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/user/connected-repositories`, {
+        credentials: 'include',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSelectedRepositories(data.repositories || [])
+      } else {
+        setSelectedRepositories([])
+      }
+    } catch {
+      setSelectedRepositories([])
+    }
+  }, [config.mode])
+
+  useEffect(() => {
+    reloadSelectedRepositories()
+  }, [reloadSelectedRepositories])
+  
   // State for mock mode - initialize with data immediately if in mock mode
   const [mockPullRequests, setMockPullRequests] = useState<PullRequest[]>(
     config.mode === 'mock' ? mockPullRequestsData : []
   )
-  const [mockLoading, setMockLoading] = useState(false) // Start with false since we have data
+  const [mockLoading, setMockLoading] = useState(false)
   const [mockError, setMockError] = useState<string | null>(null)
   
-  // Fetch mock data
   const fetchMockData = useCallback(async () => {
     try {
       setMockLoading(true)
@@ -82,33 +107,26 @@ export function GitHubProvider({
     }
   }, [service])
   
-  // No-op effect for mock mode (data is already loaded via initial state)
   useEffect(() => {
     // Mock data is loaded directly via initial state
-    // No additional fetching needed on mount
   }, [])
   
-  // Use the GitHub data hook (but with empty repositories for mock mode to prevent API calls)
+  // Use the GitHub data hook (repositories come from user selection when in api mode)
   const githubData = useGitHubData({
-    repositories: config.mode === 'api' && config.apiConfig 
-      ? [`${config.apiConfig.owner}/${config.apiConfig.repo}`] 
-      : [], // Empty array prevents any API calls
+    repositories: config.mode === 'api' ? selectedRepositories : [],
     autoRefresh: config.mode === 'api' && config.autoRefresh,
     refreshInterval: config.refreshInterval,
-    accessToken: config.apiConfig?.token,
     useWebSocket: config.mode === 'api'
   })
   
-  // Select the appropriate data source based on mode
   const pullRequests: PullRequest[] = config.mode === 'mock' 
     ? mockPullRequests 
-    : githubData.pullRequests as PullRequest[] // Type assertion since the types are compatible
+    : githubData.pullRequests as PullRequest[]
   const loading = config.mode === 'mock' ? mockLoading : githubData.loading
   const error = config.mode === 'mock' ? mockError : githubData.error
   const refresh = config.mode === 'mock' ? fetchMockData : githubData.refresh
   const updatePRStatus = config.mode === 'mock' 
     ? async (owner: string, repo: string, prNumber: number, action: 'close' | 'reopen' | 'merge') => {
-        // In mock mode, find PR by number and update its status
         const pr = mockPullRequests.find(p => p.number === prNumber)
         if (pr) {
           let newStatus: PullRequest['status']
@@ -124,7 +142,6 @@ export function GitHubProvider({
       }
     : githubData.updatePRStatus
   
-  // Group pull requests by issues
   const issues = useMemo(() => {
     const issueMap = new Map<string, Issue>()
     
@@ -147,7 +164,6 @@ export function GitHubProvider({
     return Array.from(issueMap.values())
   }, [githubData.pullRequests])
   
-  // Create wrapper for updatePullRequestStatus
   const updatePullRequestStatus = useMemo(() => async (prId: string, status: PullRequest['status']) => {
     if (config.mode === 'mock') {
       const mockService = service as MockGitHubService
@@ -167,7 +183,6 @@ export function GitHubProvider({
         repo = pr.repository.name
       }
       
-      // Map status to action
       let action: 'close' | 'reopen' | 'merge'
       switch (status) {
         case 'closed':
@@ -186,24 +201,20 @@ export function GitHubProvider({
       
       await updatePRStatus(owner, repo, pr.number, action)
     }
-  }, [config.mode, service, pullRequests, updatePRStatus, setMockPullRequests])
+  }, [config.mode, service, pullRequests, updatePRStatus])
   
-  // Create wrapper for deletePullRequests
   const deletePullRequests = useMemo(() => async (prIds: string[]) => {
     if (config.mode === 'mock') {
       const mockService = service as MockGitHubService
       await mockService.deletePullRequests(prIds)
       setMockPullRequests(prev => prev.filter(pr => !prIds.includes(pr.id)))
     } else {
-      // For API mode, this would need custom implementation
       await service.deletePullRequests(prIds)
-      // Refresh data after deletion
       await refresh()
     }
   }, [config.mode, service, refresh])
   
   const value: GitHubContextValue = {
-    // Original properties
     pullRequests,
     repositories: config.mode === 'mock' ? [] : githubData.repositories,
     loading,
@@ -213,18 +224,17 @@ export function GitHubProvider({
     addComment: config.mode === 'mock' ? async () => {} : githubData.addComment,
     connected: config.mode === 'mock' ? false : githubData.connected,
     
-    // Computed/mapped properties
     issues,
     updatePullRequestStatus,
     deletePullRequests,
-    refetch: refresh, // Alias for refresh
+    refetch: refresh,
     
-    // Context-specific properties
     config,
-    service
+    service,
+    selectedRepositories,
+    reloadSelectedRepositories,
   }
 
-  
   return (
     <GitHubContext.Provider value={value}>
       {children}

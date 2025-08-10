@@ -8,7 +8,7 @@ import {
 import { IssueCard } from '@/components/IssueCard'
 import { useGitHub } from '@/contexts/GitHubContext'
 import { getNextStatus } from '@/utils/github.utils'
-import { PullRequest } from '@/types/github'
+import { PullRequest, Repository } from '@/types/github'
 
 export function PRManager() {
   const { 
@@ -18,7 +18,9 @@ export function PRManager() {
     error, 
     updatePullRequestStatus,
     deletePullRequests,
-    refetch 
+    refetch,
+    selectedRepositories,
+    reloadSelectedRepositories,
   } = useGitHub()
   
   const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set())
@@ -26,6 +28,54 @@ export function PRManager() {
   const [selectedIssues, setSelectedIssues] = useState<Set<string>>(new Set())
   const [highlightedIssue, setHighlightedIssue] = useState<string | null>(null)
   const [isDarkMode, setIsDarkMode] = useState(false)
+
+  const [availableRepos, setAvailableRepos] = useState<Repository[]>([])
+  const [pendingRepos, setPendingRepos] = useState<string[]>(selectedRepositories)
+
+  useEffect(() => {
+    setPendingRepos(selectedRepositories)
+  }, [selectedRepositories])
+
+  const loadRepos = async () => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/repositories`, {
+        credentials: 'include',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAvailableRepos(data)
+      }
+    } catch (e) {
+      console.error('Failed to load repositories', e)
+    }
+  }
+
+  const saveRepos = async () => {
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/user/connected-repositories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ repositories: pendingRepos }),
+      })
+      await reloadSelectedRepositories()
+      await refetch()
+    } catch (e) {
+      console.error('Failed to save repositories', e)
+    }
+  }
+
+  const toggleRepo = (fullName: string) => {
+    setPendingRepos(prev => prev.includes(fullName) ? prev.filter(r => r !== fullName) : [...prev, fullName])
+  }
+
+  const logout = async () => {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    window.location.reload()
+  }
   
   // Initialize expanded issues when data loads
   useEffect(() => {
@@ -43,7 +93,6 @@ export function PRManager() {
         document.documentElement.classList.add('dark')
       }
     } else {
-      // Check system preference
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
       setIsDarkMode(prefersDark)
       if (prefersDark) {
@@ -71,10 +120,8 @@ export function PRManager() {
   const toggleAllIssues = () => {
     if (!issues) return
     if (allExpanded || (!allExpanded && !allCollapsed)) {
-      // Collapse all
       setExpandedIssues(new Set())
     } else {
-      // Expand all
       setExpandedIssues(new Set(issues.map(i => i.id)))
     }
   }
@@ -107,13 +154,11 @@ export function PRManager() {
     const newSelectedIssues = new Set(selectedIssues)
     
     if (checked) {
-      // Select issue and all its PRs
       newSelectedIssues.add(issueId)
       issue.pullRequests.forEach(pr => {
         newSelectedPRs.add(pr.id)
       })
     } else {
-      // Deselect issue and all its PRs
       newSelectedIssues.delete(issueId)
       issue.pullRequests.forEach(pr => {
         newSelectedPRs.delete(pr.id)
@@ -128,14 +173,9 @@ export function PRManager() {
     if (selectedPRs.size === 0) return
     
     try {
-      // Call the delete service method
       await deletePullRequests(Array.from(selectedPRs))
-      
-      // Clear selections after successful deletion
       setSelectedPRs(new Set())
       setSelectedIssues(new Set())
-      
-      // Optionally refresh the data to ensure UI is up to date
       await refetch()
     } catch (error) {
       console.error('Failed to delete pull requests:', error)
@@ -143,16 +183,11 @@ export function PRManager() {
   }
   
   const scrollToIssue = (issueId: string) => {
-    // Expand the issue if it's collapsed
     setExpandedIssues(prev => new Set([...prev, issueId]))
-    
-    // Scroll to the issue element
     setTimeout(() => {
       const element = document.getElementById(`issue-container-${issueId}`)
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        
-        // Add highlight effect
         setHighlightedIssue(issueId)
         setTimeout(() => setHighlightedIssue(null), 2000)
       }
@@ -205,6 +240,14 @@ export function PRManager() {
               <p className="text-muted-foreground text-xs">Multi-Agent PR Competition Tracker</p>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                className="h-6 px-3 py-0 text-xs"
+              >
+                Logout
+              </Button>
               {hasSelection && (
                 <>
                   <span className="text-xs uppercase text-muted-foreground">
@@ -235,6 +278,32 @@ export function PRManager() {
                 )}
               </Button>
             </div>
+          </div>
+        </div>
+
+        {/* Repo connection */}
+        <div className="mb-4 p-3 border rounded">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium">Connected Repositories</div>
+            <div className="space-x-2">
+              <Button variant="outline" size="sm" onClick={loadRepos} className="h-6 px-2 py-0 text-xs">Load</Button>
+              <Button size="sm" onClick={saveRepos} className="h-6 px-2 py-0 text-xs">Save</Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-auto">
+            {availableRepos.map(r => (
+              <label key={`${r.owner}/${r.name}`} className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={pendingRepos.includes(`${r.owner}/${r.name}`)}
+                  onChange={() => toggleRepo(`${r.owner}/${r.name}`)}
+                />
+                <span>{r.owner}/{r.name}</span>
+              </label>
+            ))}
+            {availableRepos.length === 0 && (
+              <div className="text-xs text-muted-foreground">Click Load to fetch your repositories</div>
+            )}
           </div>
         </div>
         

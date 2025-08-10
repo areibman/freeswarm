@@ -1,36 +1,23 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FreeSwarm PR Manager
 
-## Getting Started
+This project tracks and manages PRs across GitHub repositories with a modern Next.js frontend and an Express backend.
 
-First, run the development server:
+## Sign in with GitHub
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Click "Continue with GitHub" to authenticate via OAuth
+- The backend sets an HTTP-only session cookie
+- All API calls from the frontend include credentials and use the session
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Backend endpoints:
+- GET `/auth/github/login` → Redirects to GitHub OAuth
+- GET `/auth/github/callback` → Handles OAuth callback, sets cookie, redirects to frontend
+- GET `/auth/session` → Returns session status
+- POST `/auth/logout` → Clears session cookie
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Connect repositories
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+After signing in, the app fetches your accessible repositories from GitHub via your session token. Configure the specific repositories to track in `src/config/github.config.ts` by setting `mode: 'api'` and the `owner`/`repo` pair(s) you want to monitor.
 
-## Learn More
+For multi-repo support, pass a list to the hook or extend the provider to store selected repos per user.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See `ENV_SETUP.md` and `backend/env.example` for required environment variables, including GitHub OAuth credentials and cookie settings.

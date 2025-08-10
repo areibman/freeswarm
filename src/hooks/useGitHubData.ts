@@ -106,14 +106,10 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
-      
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
 
       const response = await fetch(
         `${API_BASE_URL}/api/pull-requests?repositories=${repositories.join(',')}`,
-        { headers }
+        { headers, credentials: 'include' }
       );
 
       if (!response.ok) {
@@ -130,7 +126,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       try {
         const cachedResponse = await fetch(
           `${API_BASE_URL}/api/pull-requests/cached?repositories=${repositories.join(',')}`,
-          { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} }
+          { credentials: 'include' }
         );
         
         if (cachedResponse.ok) {
@@ -144,7 +140,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     } finally {
       setLoading(false);
     }
-  }, [repositories, accessToken]);
+  }, [repositories]);
 
   // Fetch repositories list
   const fetchRepositories = useCallback(async () => {
@@ -157,12 +153,8 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
-      
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
 
-      const response = await fetch(`${API_BASE_URL}/api/repositories`, { headers });
+      const response = await fetch(`${API_BASE_URL}/api/repositories`, { headers, credentials: 'include' });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch repositories: ${response.statusText}`);
@@ -173,7 +165,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     } catch (err) {
       console.error('Error fetching repositories:', err);
     }
-  }, [accessToken, repositories.length]);
+  }, [repositories.length]);
 
   // Update PR status
   const updatePRStatus = useCallback(async (
@@ -186,10 +178,6 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
-      
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
 
       const response = await fetch(
         `${API_BASE_URL}/api/repos/${owner}/${repo}/pull-requests/${prNumber}/status`,
@@ -197,6 +185,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
           method: 'PUT',
           headers,
           body: JSON.stringify({ action }),
+          credentials: 'include',
         }
       );
 
@@ -210,7 +199,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       console.error('Error updating PR status:', err);
       throw err;
     }
-  }, [accessToken, fetchPullRequests]);
+  }, [fetchPullRequests]);
 
   // Add comment to PR
   const addComment = useCallback(async (
@@ -223,10 +212,6 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
-      
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
 
       const response = await fetch(
         `${API_BASE_URL}/api/repos/${owner}/${repo}/pull-requests/${prNumber}/comments`,
@@ -234,6 +219,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
           method: 'POST',
           headers,
           body: JSON.stringify({ comment }),
+          credentials: 'include',
         }
       );
 
@@ -244,7 +230,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       console.error('Error adding comment:', err);
       throw err;
     }
-  }, [accessToken]);
+  }, []);
 
   // Setup WebSocket connection
   useEffect(() => {
@@ -255,6 +241,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      withCredentials: true,
     });
 
     const socket = socketRef.current;
@@ -292,7 +279,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     });
 
     // Handle webhook events
-    socket.on('webhook:pr', (data: any) => {
+    socket.on('webhook:pr', (data: unknown) => {
       console.log('Webhook PR event:', data);
       // Refresh data on webhook events
       fetchPullRequests();

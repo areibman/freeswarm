@@ -1,11 +1,19 @@
-import { GitHubProvider } from '@/contexts/GitHubContext'
+import { AuthenticatedGitHubProvider } from '@/contexts/AuthenticatedGitHubContext'
 import { PRManager } from '@/components/PRManager'
-import { githubConfig } from '@/config/github.config'
+import { Navigation } from '@/components/Navigation'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 export default function Home() {
   return (
-    <GitHubProvider config={githubConfig}>
-      <PRManager />
-    </GitHubProvider>
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <main>
+          <AuthenticatedGitHubProvider>
+            <PRManager />
+          </AuthenticatedGitHubProvider>
+        </main>
+      </div>
+    </ProtectedRoute>
   )
 }

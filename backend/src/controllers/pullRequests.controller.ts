@@ -3,6 +3,21 @@ import { GitHubService } from '../services/github.service';
 import { CacheService } from '../services/cache.service';
 import { WebSocketService } from '../services/websocket.service';
 import db from '../config/database';
+import jwt from 'jsonwebtoken';
+
+function getAccessTokenFromRequest(req: Request): string | undefined {
+  const headerToken = req.headers.authorization?.replace('Bearer ', '');
+  if (headerToken) return headerToken;
+  const cookieName = process.env.COOKIE_NAME || 'fs_session';
+  const sessionJwt = (req as any).cookies?.[cookieName];
+  if (!sessionJwt) return undefined;
+  try {
+    const decoded: any = jwt.verify(sessionJwt, process.env.JWT_SECRET as string);
+    return decoded?.githubAccessToken as string | undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export class PullRequestsController {
   private cacheService: CacheService;
@@ -17,7 +32,7 @@ export class PullRequestsController {
   async getAllPullRequests(req: Request, res: Response) {
     try {
       const { repositories, state = 'all', useCache = true } = req.query;
-      const accessToken = req.headers.authorization?.replace('Bearer ', '');
+      const accessToken = getAccessTokenFromRequest(req);
 
       if (!repositories) {
         return res.status(400).json({ error: 'Repositories parameter is required' });
@@ -35,7 +50,7 @@ export class PullRequestsController {
       }
 
       const githubService = new GitHubService(accessToken);
-      const allPRs = [];
+      const allPRs = [] as any[];
 
       for (const repo of repoList) {
         const [owner, name] = repo.split('/');
@@ -90,7 +105,7 @@ export class PullRequestsController {
     try {
       const { owner, repo } = req.params;
       const { state = 'all' } = req.query;
-      const accessToken = req.headers.authorization?.replace('Bearer ', '');
+      const accessToken = getAccessTokenFromRequest(req);
 
       const githubService = new GitHubService(accessToken);
       const prs = await githubService.fetchPullRequests(owner, repo, state as any);
@@ -107,7 +122,7 @@ export class PullRequestsController {
     try {
       const { owner, repo, prNumber } = req.params;
       const { action } = req.body;
-      const accessToken = req.headers.authorization?.replace('Bearer ', '');
+      const accessToken = getAccessTokenFromRequest(req);
 
       if (!['close', 'reopen', 'merge'].includes(action)) {
         return res.status(400).json({ error: 'Invalid action. Must be close, reopen, or merge' });
@@ -136,7 +151,7 @@ export class PullRequestsController {
     try {
       const { owner, repo, prNumber } = req.params;
       const { comment } = req.body;
-      const accessToken = req.headers.authorization?.replace('Bearer ', '');
+      const accessToken = getAccessTokenFromRequest(req);
 
       if (!comment) {
         return res.status(400).json({ error: 'Comment is required' });
@@ -158,7 +173,7 @@ export class PullRequestsController {
       const { repositories } = req.query;
 
       let query = 'SELECT data FROM pull_requests';
-      const params = [];
+      const params: any[] = [];
 
       if (repositories) {
         const repoList = (repositories as string).split(',');
@@ -166,13 +181,13 @@ export class PullRequestsController {
         params.push(...repoList);
       }
 
-      db.all(query, params, (err, rows: any[]) => {
+      db.all(query, params, (err: any, rows: any[]) => {
         if (err) {
           console.error('Database error:', err);
           return res.status(500).json({ error: 'Failed to fetch cached pull requests' });
         }
 
-        const prs = rows.map(row => JSON.parse(row.data));
+        const prs = rows.map((row: any) => JSON.parse(row.data));
         res.json(prs);
       });
     } catch (error) {

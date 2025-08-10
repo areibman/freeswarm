@@ -1,11 +1,11 @@
 import { GitHubProvider } from '@/contexts/GitHubContext'
-import { PRManager } from '@/components/PRManager'
+import { LandingPage } from '@/components/LandingPage'
 import { githubConfig } from '@/config/github.config'
 
 export default function Home() {
   return (
     <GitHubProvider config={githubConfig}>
-      <PRManager />
+      <LandingPage />
     </GitHubProvider>
   )
 }

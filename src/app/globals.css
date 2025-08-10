@@ -55,10 +55,35 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-    font-size: 11px;
-    line-height: 1.3;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Roboto Mono', monospace;
+    font-size: 14px;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+  }
+  
+  /* Teenage Engineering inspired typography */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
     letter-spacing: -0.02em;
+  }
+  
+  /* Custom scrollbar for Teenage Engineering aesthetic */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #ffffff;
+    border-radius: 0;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #cccccc;
   }
 }
 

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Freeswarm - Multi-Agent Competition Tracker",
-  description: "Track and manage pull requests from competing AI agents",
+  title: "FreeSwarm - Auto-Deploy PR Reviews for Multi-Agent Teams",
+  description: "Stop fighting agent chaos. FreeSwarm auto-deploys every pull request so your team can review AI agent changes instantly—no local setup required.",
 };
 
 export default function RootLayout({
@@ -13,7 +13,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body>
+        {children}
+      </body>
     </html>
   );
 }

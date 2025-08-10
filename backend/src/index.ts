@@ -9,6 +9,8 @@ import { initDatabase } from './config/database';
 import { WebSocketService } from './services/websocket.service';
 import { PullRequestsController } from './controllers/pullRequests.controller';
 import { WebhooksController } from './controllers/webhooks.controller';
+import { AuthController } from './controllers/auth.controller';
+import { RepositoriesController } from './controllers/repositories.controller';
 import { CacheService } from './services/cache.service';
 
 // Load environment variables
@@ -25,6 +27,8 @@ const wsService = new WebSocketService(server);
 // Initialize controllers
 const pullRequestsController = new PullRequestsController(wsService);
 const webhooksController = new WebhooksController(wsService);
+const authController = new AuthController();
+const repositoriesController = new RepositoriesController();
 const cacheService = new CacheService();
 
 // Middleware
@@ -63,7 +67,21 @@ app.get('/health', (req, res) => {
 
 // API Routes
 
-// Pull Requests
+// Authentication
+app.post('/api/auth/github/callback', (req, res) => authController.handleGitHubCallback(req, res));
+app.get('/api/auth/user', (req, res) => authController.getCurrentUser(req, res));
+app.put('/api/auth/user/preferences', (req, res) => authController.updateUserPreferences(req, res));
+app.post('/api/auth/refresh', (req, res) => authController.refreshGitHubToken(req, res));
+
+// Repositories
+app.get('/api/repositories', (req, res) => repositoriesController.getUserRepositories(req, res));
+app.get('/api/repositories/available', (req, res) => repositoriesController.getAvailableRepositories(req, res));
+app.post('/api/repositories/connect', (req, res) => repositoriesController.connectRepository(req, res));
+app.delete('/api/repositories/:repositoryId/disconnect', (req, res) => repositoriesController.disconnectRepository(req, res));
+app.get('/api/repositories/:repositoryId/pull-requests', (req, res) => repositoriesController.getRepositoryPullRequests(req, res));
+app.get('/api/repositories/:repositoryId/issues', (req, res) => repositoriesController.getRepositoryIssues(req, res));
+
+// Pull Requests (legacy endpoints - keeping for backward compatibility)
 app.get('/api/pull-requests', (req, res) => pullRequestsController.getAllPullRequests(req, res));
 app.get('/api/pull-requests/cached', (req, res) => pullRequestsController.getCachedPullRequests(req, res));
 app.get('/api/repos/:owner/:repo/pull-requests', (req, res) => pullRequestsController.getRepositoryPullRequests(req, res));

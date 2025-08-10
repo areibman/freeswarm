@@ -62,6 +62,7 @@ export interface GitHubService {
   fetchRepository(): Promise<Repository>
   updatePullRequestStatus(prId: string, status: PullRequest['status']): Promise<PullRequest>
   linkPullRequestToIssue(prId: string, issueId: string): Promise<void>
+  deletePullRequests(prIds: string[]): Promise<void>
 }
 
 // Base service class that can be extended for real GitHub API
@@ -95,6 +96,11 @@ export class BaseGitHubService implements GitHubService {
   async linkPullRequestToIssue(prId: string, issueId: string): Promise<void> {
     // To be implemented by subclasses
     throw new Error('linkPullRequestToIssue not implemented')
+  }
+
+  async deletePullRequests(prIds: string[]): Promise<void> {
+    // To be implemented by subclasses
+    throw new Error('deletePullRequests not implemented')
   }
 }
 
@@ -179,6 +185,13 @@ export class GitHubAPIService extends BaseGitHubService {
   async linkPullRequestToIssue(prId: string, issueId: string): Promise<void> {
     // This would typically be done through PR body or comments
     console.warn('linkPullRequestToIssue: Custom implementation needed')
+    throw new Error('Not implemented for direct GitHub API')
+  }
+
+  async deletePullRequests(prIds: string[]): Promise<void> {
+    // GitHub API doesn't support deleting PRs, only closing them
+    // This would need to be implemented using a custom backend
+    console.warn('deletePullRequests: Custom implementation needed')
     throw new Error('Not implemented for direct GitHub API')
   }
 

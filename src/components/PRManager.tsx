@@ -17,6 +17,7 @@ export function PRManager() {
     loading, 
     error, 
     updatePullRequestStatus,
+    deletePullRequests,
     refetch 
   } = useGitHub()
   
@@ -123,13 +124,22 @@ export function PRManager() {
     setSelectedPRs(newSelectedPRs)
   }
   
-  const deleteSelected = () => {
-    // This would normally update the backend
-    // For now, just clear selections
-    setSelectedPRs(new Set())
-    setSelectedIssues(new Set())
-    // In production, you'd call a delete service method here
-    console.log('Delete selected PRs:', Array.from(selectedPRs))
+  const deleteSelected = async () => {
+    if (selectedPRs.size === 0) return
+    
+    try {
+      // Call the delete service method
+      await deletePullRequests(Array.from(selectedPRs))
+      
+      // Clear selections after successful deletion
+      setSelectedPRs(new Set())
+      setSelectedIssues(new Set())
+      
+      // Optionally refresh the data to ensure UI is up to date
+      await refetch()
+    } catch (error) {
+      console.error('Failed to delete pull requests:', error)
+    }
   }
   
   const scrollToIssue = (issueId: string) => {

@@ -221,7 +221,7 @@ export class MockGitHubService extends BaseGitHubService {
     const issueMap = new Map<string, PullRequest[]>()
     
     pullRequests.forEach(pr => {
-      const issueName = this.extractIssueName(pr.branchName, pr.sourceAgent)
+      const issueName = this.extractIssueName(pr.branchName, pr.sourceAgent || null)
       const existing = issueMap.get(issueName) || []
       existing.push({ ...pr, issueId: issueName })
       issueMap.set(issueName, existing)
@@ -287,6 +287,11 @@ export class MockGitHubService extends BaseGitHubService {
     }
     
     this.mockPullRequests[prIndex].issueId = issueId
+  }
+
+  async deletePullRequests(prIds: string[]): Promise<void> {
+    // Filter out the PRs with the given IDs
+    this.mockPullRequests = this.mockPullRequests.filter(pr => !prIds.includes(pr.id))
   }
 
   // Helper methods

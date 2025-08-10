@@ -33,6 +33,7 @@ interface GitHubContextValue {
   // Computed/mapped properties for compatibility
   issues: Issue[]
   updatePullRequestStatus: (prId: string, status: PullRequest['status']) => Promise<void>
+  deletePullRequests: (prIds: string[]) => Promise<void>
   refetch: () => Promise<void>
   
   // Context-specific properties
@@ -187,6 +188,20 @@ export function GitHubProvider({
     }
   }, [config.mode, service, pullRequests, updatePRStatus, setMockPullRequests])
   
+  // Create wrapper for deletePullRequests
+  const deletePullRequests = useMemo(() => async (prIds: string[]) => {
+    if (config.mode === 'mock') {
+      const mockService = service as MockGitHubService
+      await mockService.deletePullRequests(prIds)
+      setMockPullRequests(prev => prev.filter(pr => !prIds.includes(pr.id)))
+    } else {
+      // For API mode, this would need custom implementation
+      await service.deletePullRequests(prIds)
+      // Refresh data after deletion
+      await refresh()
+    }
+  }, [config.mode, service, refresh])
+  
   const value: GitHubContextValue = {
     // Original properties
     pullRequests,
@@ -201,6 +216,7 @@ export function GitHubProvider({
     // Computed/mapped properties
     issues,
     updatePullRequestStatus,
+    deletePullRequests,
     refetch: refresh, // Alias for refresh
     
     // Context-specific properties

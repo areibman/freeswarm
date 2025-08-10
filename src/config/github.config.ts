@@ -13,8 +13,8 @@ import { GitHubConfig } from '@/contexts/GitHubContext'
  * - Set baseUrl to your GitHub Enterprise API endpoint
  */
 export const githubConfig: GitHubConfig = {
-  // Data source mode - defaulting to 'mock' for now
-  mode: (process.env.NEXT_PUBLIC_GITHUB_MODE as 'mock' | 'api') || 'mock',
+  // Data source mode - defaulting to 'api' for OAuth flow
+  mode: (process.env.NEXT_PUBLIC_GITHUB_MODE as 'mock' | 'api') || 'api',
   
   // API configuration (used when mode is 'api')
   apiConfig: {

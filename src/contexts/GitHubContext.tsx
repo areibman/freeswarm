@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect, useCallback } from 'react'
+import { useSession } from 'next-auth/react'
 import { GitHubService } from '@/services/github.service'
 import { MockGitHubService, mockPullRequestsData } from '@/services/mock-github.service'
 import { GitHubAPIService } from '@/services/github.service'
@@ -52,13 +53,17 @@ export function GitHubProvider({
   children, 
   config = { mode: 'mock' } 
 }: GitHubProviderProps) {
-  // Create the appropriate service based on config
+  // Access NextAuth session for GitHub access token (if user is signed in)
+  const { data: session } = useSession()
+  const sessionToken = session?.accessToken
+
+  // Create the appropriate service based on config, including dynamic token when authenticated
   const service = React.useMemo(() => {
     if (config.mode === 'api' && config.apiConfig) {
-      return new GitHubAPIService(config.apiConfig)
+      return new GitHubAPIService({ ...config.apiConfig, token: sessionToken || config.apiConfig.token })
     }
     return new MockGitHubService()
-  }, [config.mode, config.apiConfig])
+  }, [config.mode, config.apiConfig, sessionToken])
   
   // State for mock mode - initialize with data immediately if in mock mode
   const [mockPullRequests, setMockPullRequests] = useState<PullRequest[]>(
@@ -89,13 +94,14 @@ export function GitHubProvider({
   }, [])
   
   // Use the GitHub data hook (but with empty repositories for mock mode to prevent API calls)
+  // sessionToken already defined earlier
   const githubData = useGitHubData({
     repositories: config.mode === 'api' && config.apiConfig 
       ? [`${config.apiConfig.owner}/${config.apiConfig.repo}`] 
       : [], // Empty array prevents any API calls
     autoRefresh: config.mode === 'api' && config.autoRefresh,
     refreshInterval: config.refreshInterval,
-    accessToken: config.apiConfig?.token,
+    accessToken: sessionToken || config.apiConfig?.token,
     useWebSocket: config.mode === 'api'
   })
   

@@ -70,6 +70,7 @@ export interface UseGitHubDataReturn {
   refresh: () => Promise<void>;
   updatePRStatus: (owner: string, repo: string, prNumber: number, action: 'close' | 'reopen' | 'merge') => Promise<void>;
   addComment: (owner: string, repo: string, prNumber: number, comment: string) => Promise<void>;
+  launchPreview: (owner: string, repo: string, prNumber: number, branchName: string) => Promise<string>;
   connected: boolean;
 }
 
@@ -246,6 +247,42 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     }
   }, [accessToken]);
 
+  // Add: Launch Preview for a PR/branch
+  const launchPreview = useCallback(async (
+    owner: string,
+    repo: string,
+    prNumber: number,
+    branchName: string
+  ) => {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/repos/${owner}/${repo}/pull-requests/${prNumber}/preview`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ branchName }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to launch preview: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const liveLink = data.liveLink as string;
+
+    // Optimistically update local state for this PR only
+    setPullRequests(prev => prev.map(pr => (
+      pr.number === prNumber && pr.repository === `${owner}/${repo}`
+        ? { ...pr, liveLink }
+        : pr
+    )));
+
+    return liveLink;
+  }, [accessToken]);
+
   // Setup WebSocket connection
   useEffect(() => {
     if (!useWebSocket) return;
@@ -292,8 +329,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     });
 
     // Handle webhook events
-    socket.on('webhook:pr', (data: any) => {
-      console.log('Webhook PR event:', data);
+    socket.on('webhook:pr', (_data: unknown) => {
       // Refresh data on webhook events
       fetchPullRequests();
     });
@@ -338,6 +374,7 @@ export function useGitHubData(options: UseGitHubDataOptions = {}): UseGitHubData
     refresh: fetchPullRequests,
     updatePRStatus,
     addComment,
+    launchPreview,
     connected,
   };
 }

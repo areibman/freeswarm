@@ -13,6 +13,69 @@ export class PullRequestsController {
     this.wsService = wsService;
   }
 
+  // Launch a per-branch preview environment for a PR
+  async launchPreview(req: Request, res: Response) {
+    try {
+      const { owner, repo, prNumber } = req.params as { owner: string; repo: string; prNumber: string }
+      const { branchName } = req.body as { branchName?: string }
+      const accessToken = req.headers.authorization?.replace('Bearer ', '')
+
+      if (!branchName) {
+        return res.status(400).json({ error: 'branchName is required' })
+      }
+
+      // Create or fetch preview URL
+      const { PreviewService } = await import('../services/preview.service')
+      const previewService = new PreviewService()
+      const liveLink = previewService.getOrCreatePreviewUrl({
+        owner,
+        repo,
+        branchName,
+        prNumber: parseInt(prNumber, 10),
+      })
+
+      const prId = `pr-${owner}/${repo}-${parseInt(prNumber, 10)}`
+
+      // Update DB cached PR JSON with liveLink if present
+      await new Promise<void>((resolve) => {
+        db.get(
+          'SELECT data FROM pull_requests WHERE id = ? LIMIT 1',
+          [prId],
+          (err, row: any) => {
+            if (err) {
+              console.error('DB read error (preview):', err)
+              return resolve()
+            }
+            if (!row) return resolve()
+            try {
+              const data = row.data ? JSON.parse(row.data) : {}
+              data.liveLink = liveLink
+              db.run(
+                'UPDATE pull_requests SET data = ? WHERE id = ?',
+                [JSON.stringify(data), prId],
+                (updateErr) => {
+                  if (updateErr) console.error('DB update error (preview):', updateErr)
+                  resolve()
+                }
+              )
+            } catch (e) {
+              console.error('Failed to update PR data JSON (preview):', e)
+              resolve()
+            }
+          }
+        )
+      })
+
+      // Notify clients for ONLY this PR
+      this.wsService?.broadcastPRUpdate(prId, { liveLink })
+
+      return res.json({ success: true, liveLink })
+    } catch (error) {
+      console.error('Error launching preview:', error)
+      res.status(500).json({ error: 'Failed to launch preview' })
+    }
+  }
+
   // Get all pull requests from multiple repositories
   async getAllPullRequests(req: Request, res: Response) {
     try {

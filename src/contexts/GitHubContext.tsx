@@ -35,6 +35,9 @@ interface GitHubContextValue {
   updatePullRequestStatus: (prId: string, status: PullRequest['status']) => Promise<void>
   deletePullRequests: (prIds: string[]) => Promise<void>
   refetch: () => Promise<void>
+
+  // Preview
+  launchPreviewForPR: (prId: string) => Promise<string>
   
   // Context-specific properties
   config: GitHubConfig
@@ -202,6 +205,33 @@ export function GitHubProvider({
     }
   }, [config.mode, service, refresh])
   
+  // Launch preview wrapper
+  const launchPreviewForPR = useMemo(() => async (prId: string) => {
+    const pr = pullRequests.find(p => p.id === prId)
+    if (!pr || !pr.number || !pr.repository) throw new Error('Pull request not found or missing fields')
+
+    let owner: string, repo: string
+    if (typeof pr.repository === 'string') {
+      ;[owner, repo] = pr.repository.split('/')
+    } else {
+      owner = pr.repository.owner
+      repo = pr.repository.name
+    }
+
+    // In mock mode, just set a synthetic link
+    if (config.mode === 'mock') {
+      const branchSlug = pr.branchName.replace(/[^a-z0-9-]/gi, '-').toLowerCase()
+      const repoSlug = (typeof pr.repository === 'string' ? repo : pr.repository.name).replace(/[^a-z0-9-]/gi, '-').toLowerCase()
+      const ownerSlug = (typeof pr.repository === 'string' ? owner : pr.repository.owner).replace(/[^a-z0-9-]/gi, '-').toLowerCase()
+      const liveLink = `https://${branchSlug}-${repoSlug}-${ownerSlug}.preview.local`
+      setMockPullRequests(prev => prev.map(p => p.id === prId ? { ...p, liveLink } : p))
+      return liveLink
+    }
+
+    const liveLink = await githubData.launchPreview(owner, repo, pr.number, pr.branchName)
+    return liveLink
+  }, [pullRequests, githubData, config.mode])
+
   const value: GitHubContextValue = {
     // Original properties
     pullRequests,
@@ -218,6 +248,9 @@ export function GitHubProvider({
     updatePullRequestStatus,
     deletePullRequests,
     refetch: refresh, // Alias for refresh
+
+    // Preview
+    launchPreviewForPR,
     
     // Context-specific properties
     config,

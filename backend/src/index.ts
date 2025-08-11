@@ -69,6 +69,7 @@ app.get('/api/pull-requests/cached', (req, res) => pullRequestsController.getCac
 app.get('/api/repos/:owner/:repo/pull-requests', (req, res) => pullRequestsController.getRepositoryPullRequests(req, res));
 app.put('/api/repos/:owner/:repo/pull-requests/:prNumber/status', (req, res) => pullRequestsController.updatePullRequestStatus(req, res));
 app.post('/api/repos/:owner/:repo/pull-requests/:prNumber/comments', (req, res) => pullRequestsController.addComment(req, res));
+app.post('/api/repos/:owner/:repo/pull-requests/:prNumber/preview', (req, res) => pullRequestsController.launchPreview(req, res));
 
 // Webhooks
 app.post('/api/webhooks/github', (req, res) => webhooksController.handleGitHubWebhook(req, res));

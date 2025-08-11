@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { PullRequest } from '@/types/github'
 import { getStatusColor, formatRelativeTime, calculateFileChanges } from '@/utils/github.utils'
+import { useGitHub } from '@/contexts/GitHubContext'
 
 export interface PullRequestCardProps {
   pullRequest: PullRequest
@@ -28,6 +29,8 @@ export function PullRequestCard({
 }: PullRequestCardProps) {
   const [activeTab, setActiveTab] = useState<'description' | 'files' | 'history' | 'preview' | 'logs' | null>(null)
   const [copiedBranch, setCopiedBranch] = useState(false)
+  const [isLaunchingPreview, setIsLaunchingPreview] = useState(false)
+  const { launchPreviewForPR } = useGitHub()
   
   const fileStats = calculateFileChanges(pr.fileChanges)
   
@@ -39,6 +42,22 @@ export function PullRequestCard({
   
   const toggleTab = (tab: 'description' | 'files' | 'history' | 'preview' | 'logs') => {
     setActiveTab(current => current === tab ? null : tab)
+  }
+
+  const handlePreviewClick = async () => {
+    if (pr.liveLink) {
+      window.open(pr.liveLink, '_blank', 'noopener,noreferrer')
+      return
+    }
+    try {
+      setIsLaunchingPreview(true)
+      setActiveTab('preview')
+      await launchPreviewForPR(pr.id)
+    } catch (e) {
+      console.error('Failed to launch preview', e)
+    } finally {
+      setIsLaunchingPreview(false)
+    }
   }
   
   const handleStatusClick = () => {
@@ -139,16 +158,15 @@ export function PullRequestCard({
               History ({pr.updateLogs.length})
             </button>
             <button
-              onClick={() => toggleTab('preview')}
+              onClick={handlePreviewClick}
               className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
                 activeTab === 'preview'
                   ? 'bg-foreground text-background border-foreground'
                   : 'text-muted-foreground hover:text-foreground border-foreground/20'
-              }`}
-              disabled={!pr.liveLink}
+              } ${isLaunchingPreview ? 'opacity-60 cursor-wait' : ''}`}
             >
               <ExternalLink className="h-3 w-3" />
-              Preview
+              {pr.liveLink ? 'Open Preview' : isLaunchingPreview ? 'Launching…' : 'Preview'}
             </button>
             <button
               onClick={() => toggleTab('logs')}
@@ -227,7 +245,7 @@ export function PullRequestCard({
                       </a>
                     </div>
                   ) : (
-                    <span className="text-muted-foreground">No preview available</span>
+                    <span className="text-muted-foreground">{isLaunchingPreview ? 'Launching preview…' : 'No preview available'}</span>
                   )}
                 </div>
               )}

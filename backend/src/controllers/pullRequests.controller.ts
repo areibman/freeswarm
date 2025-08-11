@@ -2,15 +2,18 @@ import { Request, Response } from 'express';
 import { GitHubService } from '../services/github.service';
 import { CacheService } from '../services/cache.service';
 import { WebSocketService } from '../services/websocket.service';
+import { DeploymentService } from '../services/deployment.service';
 import db from '../config/database';
 
 export class PullRequestsController {
   private cacheService: CacheService;
   private wsService?: WebSocketService;
+  private deploymentService: DeploymentService;
 
   constructor(wsService?: WebSocketService) {
     this.cacheService = new CacheService();
     this.wsService = wsService;
+    this.deploymentService = new DeploymentService();
   }
 
   // Get all pull requests from multiple repositories
@@ -178,6 +181,143 @@ export class PullRequestsController {
     } catch (error) {
       console.error('Error fetching cached pull requests:', error);
       res.status(500).json({ error: 'Failed to fetch cached pull requests' });
+    }
+  }
+
+  // Deploy a specific pull request branch
+  async deployPullRequest(req: Request, res: Response) {
+    try {
+      const { owner, repo, prNumber } = req.params;
+      const accessToken = req.headers.authorization?.replace('Bearer ', '');
+
+      // First, fetch the PR details
+      const githubService = new GitHubService(accessToken);
+      const prs = await githubService.fetchPullRequests(owner, repo, 'all');
+      const pr = prs.find(p => p.number === parseInt(prNumber));
+
+      if (!pr) {
+        return res.status(404).json({ error: 'Pull request not found' });
+      }
+
+      // Deploy the branch
+      const deploymentResult = await this.deploymentService.deployBranch(pr);
+
+      // Update the PR with deployment info
+      if (deploymentResult.success && deploymentResult.liveLink) {
+        // Store deployment info in database
+        db.run(
+          `UPDATE pull_requests 
+           SET data = json_set(data, '$.liveLink', ?, '$.sshLink', ?, '$.logs', ?) 
+           WHERE number = ? AND repository_id = ?`,
+          [
+            deploymentResult.liveLink,
+            deploymentResult.sshLink || '',
+            deploymentResult.logs || '',
+            parseInt(prNumber),
+            `${owner}/${repo}`
+          ]
+        );
+
+        // Broadcast update via WebSocket
+        if (this.wsService) {
+          this.wsService.broadcastPRUpdate(`pr-${owner}/${repo}-${prNumber}`, {
+            liveLink: deploymentResult.liveLink,
+            sshLink: deploymentResult.sshLink,
+            logs: deploymentResult.logs
+          });
+        }
+
+        // Clear cache to force refresh
+        await this.cacheService.clear(`prs:*`);
+      }
+
+      res.json({
+        success: deploymentResult.success,
+        deploymentId: deploymentResult.deploymentId,
+        liveLink: deploymentResult.liveLink,
+        sshLink: deploymentResult.sshLink,
+        logs: deploymentResult.logs,
+        error: deploymentResult.error
+      });
+    } catch (error) {
+      console.error('Error deploying pull request:', error);
+      res.status(500).json({ error: 'Failed to deploy pull request' });
+    }
+  }
+
+  // Stop a deployment
+  async stopDeployment(req: Request, res: Response) {
+    try {
+      const { owner, repo, prNumber } = req.params;
+      
+      // Generate the same deployment ID that would be used
+      const deploymentId = `${owner}-${repo}-${prNumber}`.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+      
+      const success = await this.deploymentService.stopDeployment(deploymentId);
+
+      if (success) {
+        // Update the PR to remove deployment info
+        db.run(
+          `UPDATE pull_requests 
+           SET data = json_remove(data, '$.liveLink', '$.sshLink', '$.logs') 
+           WHERE number = ? AND repository_id = ?`,
+          [parseInt(prNumber), `${owner}/${repo}`]
+        );
+
+                 // Broadcast update via WebSocket
+         if (this.wsService) {
+           this.wsService.broadcastPRUpdate(`pr-${owner}/${repo}-${prNumber}`, {
+             liveLink: undefined,
+             sshLink: undefined,
+             logs: undefined
+           });
+         }
+
+        // Clear cache
+        await this.cacheService.clear(`prs:*`);
+      }
+
+      res.json({ success, deploymentId });
+    } catch (error) {
+      console.error('Error stopping deployment:', error);
+      res.status(500).json({ error: 'Failed to stop deployment' });
+    }
+  }
+
+  // Get deployment status
+  async getDeploymentStatus(req: Request, res: Response) {
+    try {
+      const { owner, repo, prNumber } = req.params;
+      
+      // Generate the same deployment ID
+      const deploymentId = `${owner}-${repo}-${prNumber}`.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+      
+      const deployment = this.deploymentService.getDeployment(deploymentId);
+      
+      if (!deployment) {
+        return res.status(404).json({ error: 'Deployment not found' });
+      }
+
+      res.json(deployment);
+    } catch (error) {
+      console.error('Error getting deployment status:', error);
+      res.status(500).json({ error: 'Failed to get deployment status' });
+    }
+  }
+
+  // List all active deployments
+  async listDeployments(req: Request, res: Response) {
+    try {
+      const deployments = this.deploymentService.getActiveDeployments();
+      const deploymentsArray = Array.from(deployments.entries()).map(([id, deployment]) => ({
+        id,
+        ...deployment
+      }));
+
+      res.json(deploymentsArray);
+    } catch (error) {
+      console.error('Error listing deployments:', error);
+      res.status(500).json({ error: 'Failed to list deployments' });
     }
   }
 }

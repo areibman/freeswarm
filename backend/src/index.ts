@@ -70,6 +70,12 @@ app.get('/api/repos/:owner/:repo/pull-requests', (req, res) => pullRequestsContr
 app.put('/api/repos/:owner/:repo/pull-requests/:prNumber/status', (req, res) => pullRequestsController.updatePullRequestStatus(req, res));
 app.post('/api/repos/:owner/:repo/pull-requests/:prNumber/comments', (req, res) => pullRequestsController.addComment(req, res));
 
+// Deployment endpoints
+app.post('/api/repos/:owner/:repo/pull-requests/:prNumber/deploy', (req, res) => pullRequestsController.deployPullRequest(req, res));
+app.delete('/api/repos/:owner/:repo/pull-requests/:prNumber/deploy', (req, res) => pullRequestsController.stopDeployment(req, res));
+app.get('/api/repos/:owner/:repo/pull-requests/:prNumber/deploy', (req, res) => pullRequestsController.getDeploymentStatus(req, res));
+app.get('/api/deployments', (req, res) => pullRequestsController.listDeployments(req, res));
+
 // Webhooks
 app.post('/api/webhooks/github', (req, res) => webhooksController.handleGitHubWebhook(req, res));
 

@@ -36,6 +36,10 @@ interface GitHubContextValue {
   deletePullRequests: (prIds: string[]) => Promise<void>
   refetch: () => Promise<void>
   
+  // Deployment functionality
+  deployPullRequest: (prId: string) => Promise<{ success: boolean; liveLink?: string; error?: string }>
+  stopDeployment: (prId: string) => Promise<{ success: boolean }>
+  
   // Context-specific properties
   config: GitHubConfig
   service: GitHubService
@@ -106,23 +110,25 @@ export function GitHubProvider({
   const loading = config.mode === 'mock' ? mockLoading : githubData.loading
   const error = config.mode === 'mock' ? mockError : githubData.error
   const refresh = config.mode === 'mock' ? fetchMockData : githubData.refresh
-  const updatePRStatus = config.mode === 'mock' 
-    ? async (owner: string, repo: string, prNumber: number, action: 'close' | 'reopen' | 'merge') => {
-        // In mock mode, find PR by number and update its status
-        const pr = mockPullRequests.find(p => p.number === prNumber)
-        if (pr) {
-          let newStatus: PullRequest['status']
-          switch (action) {
-            case 'close': newStatus = 'closed'; break
-            case 'merge': newStatus = 'merged'; break
-            case 'reopen': newStatus = 'open'; break
+  const updatePRStatus = useMemo(() => {
+    return config.mode === 'mock' 
+      ? async (owner: string, repo: string, prNumber: number, action: 'close' | 'reopen' | 'merge') => {
+          // In mock mode, find PR by number and update its status
+          const pr = mockPullRequests.find(p => p.number === prNumber)
+          if (pr) {
+            let newStatus: PullRequest['status']
+            switch (action) {
+              case 'close': newStatus = 'closed'; break
+              case 'merge': newStatus = 'merged'; break
+              case 'reopen': newStatus = 'open'; break
+            }
+            const mockService = service as MockGitHubService
+            const updatedPR = await mockService.updatePullRequestStatus(pr.id, newStatus)
+            setMockPullRequests(prev => prev.map(p => p.id === pr.id ? updatedPR : p))
           }
-          const mockService = service as MockGitHubService
-          const updatedPR = await mockService.updatePullRequestStatus(pr.id, newStatus)
-          setMockPullRequests(prev => prev.map(p => p.id === pr.id ? updatedPR : p))
         }
-      }
-    : githubData.updatePRStatus
+      : githubData.updatePRStatus
+  }, [config.mode, mockPullRequests, service, githubData.updatePRStatus, setMockPullRequests])
   
   // Group pull requests by issues
   const issues = useMemo(() => {
@@ -145,7 +151,7 @@ export function GitHubProvider({
     })
     
     return Array.from(issueMap.values())
-  }, [githubData.pullRequests])
+  }, [pullRequests])
   
   // Create wrapper for updatePullRequestStatus
   const updatePullRequestStatus = useMemo(() => async (prId: string, status: PullRequest['status']) => {
@@ -201,6 +207,121 @@ export function GitHubProvider({
       await refresh()
     }
   }, [config.mode, service, refresh])
+
+  // Deploy pull request functionality
+  const deployPullRequest = useCallback(async (prId: string): Promise<{ success: boolean; liveLink?: string; error?: string }> => {
+    const pr = pullRequests.find(p => p.id === prId)
+    if (!pr) {
+      return { success: false, error: 'Pull request not found' }
+    }
+
+    try {
+      if (config.mode === 'mock') {
+        // For mock mode, simulate deployment
+        const mockLiveLink = `http://localhost:${4000 + Math.floor(Math.random() * 1000)}`
+        const updatedPR = { ...pr, liveLink: mockLiveLink }
+        setMockPullRequests(prev => prev.map(p => p.id === prId ? updatedPR : p))
+        return { success: true, liveLink: mockLiveLink }
+      } else {
+        // For API mode, call the deployment endpoint
+        let owner: string, repo: string
+        if (typeof pr.repository === 'string') {
+          [owner, repo] = pr.repository.split('/')
+        } else if (pr.repository) {
+          owner = pr.repository.owner
+          repo = pr.repository.name
+        } else {
+          return { success: false, error: 'Repository information missing' }
+        }
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/repos/${owner}/${repo}/pull-requests/${pr.number}/deploy`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(config.apiConfig?.token && { 'Authorization': `Bearer ${config.apiConfig.token}` })
+            }
+          }
+        )
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          return { success: false, error: errorData.error || 'Deployment failed' }
+        }
+
+        const result = await response.json()
+        
+        // Refresh data to get updated PR with liveLink
+        await refresh()
+        
+        return {
+          success: result.success,
+          liveLink: result.liveLink,
+          error: result.error
+        }
+      }
+    } catch (error) {
+      console.error('Error deploying pull request:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Deployment failed' 
+      }
+    }
+  }, [pullRequests, config, refresh, setMockPullRequests])
+
+  // Stop deployment functionality
+  const stopDeployment = useCallback(async (prId: string): Promise<{ success: boolean }> => {
+    const pr = pullRequests.find(p => p.id === prId)
+    if (!pr) {
+      return { success: false }
+    }
+
+    try {
+      if (config.mode === 'mock') {
+        // For mock mode, simulate stopping deployment
+        const updatedPR = { ...pr, liveLink: undefined, sshLink: undefined, logs: undefined }
+        setMockPullRequests(prev => prev.map(p => p.id === prId ? updatedPR : p))
+        return { success: true }
+      } else {
+        // For API mode, call the stop deployment endpoint
+        let owner: string, repo: string
+        if (typeof pr.repository === 'string') {
+          [owner, repo] = pr.repository.split('/')
+        } else if (pr.repository) {
+          owner = pr.repository.owner
+          repo = pr.repository.name
+        } else {
+          return { success: false }
+        }
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/repos/${owner}/${repo}/pull-requests/${pr.number}/deploy`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(config.apiConfig?.token && { 'Authorization': `Bearer ${config.apiConfig.token}` })
+            }
+          }
+        )
+
+        if (!response.ok) {
+          return { success: false }
+        }
+
+        const result = await response.json()
+        
+        // Refresh data to get updated PR
+        await refresh()
+        
+        return { success: result.success }
+      }
+    } catch (error) {
+      console.error('Error stopping deployment:', error)
+      return { success: false }
+    }
+  }, [pullRequests, config, refresh, setMockPullRequests])
   
   const value: GitHubContextValue = {
     // Original properties
@@ -218,6 +339,10 @@ export function GitHubProvider({
     updatePullRequestStatus,
     deletePullRequests,
     refetch: refresh, // Alias for refresh
+    
+    // Deployment functionality
+    deployPullRequest,
+    stopDeployment,
     
     // Context-specific properties
     config,

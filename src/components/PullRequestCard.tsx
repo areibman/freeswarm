@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { 
   GitBranch, Copy, Check, Clock, ExternalLink, FileText, 
-  MessageSquare, Files, History, Plus, Minus 
+  MessageSquare, Files, History, Plus, Minus, Play, Square 
 } from 'lucide-react'
 import { PullRequest } from '@/types/github'
 import { getStatusColor, formatRelativeTime, calculateFileChanges } from '@/utils/github.utils'
+import { useGitHub } from '@/contexts/GitHubContext'
 
 export interface PullRequestCardProps {
   pullRequest: PullRequest
@@ -28,7 +29,10 @@ export function PullRequestCard({
 }: PullRequestCardProps) {
   const [activeTab, setActiveTab] = useState<'description' | 'files' | 'history' | 'preview' | 'logs' | null>(null)
   const [copiedBranch, setCopiedBranch] = useState(false)
+  const [isDeploying, setIsDeploying] = useState(false)
+  const [deploymentError, setDeploymentError] = useState<string | null>(null)
   
+  const { deployPullRequest, stopDeployment } = useGitHub()
   const fileStats = calculateFileChanges(pr.fileChanges)
   
   const copyBranchName = () => {
@@ -45,6 +49,41 @@ export function PullRequestCard({
     if (onStatusChange && pr.status !== 'merged') {
       // The parent component should handle the actual status cycling logic
       onStatusChange(pr.status)
+    }
+  }
+
+  const handleDeploy = async () => {
+    setIsDeploying(true)
+    setDeploymentError(null)
+    
+    try {
+      const result = await deployPullRequest(pr.id)
+      if (!result.success) {
+        setDeploymentError(result.error || 'Deployment failed')
+      } else {
+        // Automatically switch to preview tab to show the result
+        setActiveTab('preview')
+      }
+    } catch (error) {
+      setDeploymentError(error instanceof Error ? error.message : 'Deployment failed')
+    } finally {
+      setIsDeploying(false)
+    }
+  }
+
+  const handleStopDeployment = async () => {
+    setIsDeploying(true)
+    setDeploymentError(null)
+    
+    try {
+      const result = await stopDeployment(pr.id)
+      if (!result.success) {
+        setDeploymentError('Failed to stop deployment')
+      }
+    } catch (error) {
+      setDeploymentError(error instanceof Error ? error.message : 'Failed to stop deployment')
+    } finally {
+      setIsDeploying(false)
     }
   }
   
@@ -138,18 +177,42 @@ export function PullRequestCard({
               <History className="h-3 w-3" />
               History ({pr.updateLogs.length})
             </button>
-            <button
-              onClick={() => toggleTab('preview')}
-              className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
-                activeTab === 'preview'
-                  ? 'bg-foreground text-background border-foreground'
-                  : 'text-muted-foreground hover:text-foreground border-foreground/20'
-              }`}
-              disabled={!pr.liveLink}
-            >
-              <ExternalLink className="h-3 w-3" />
-              Preview
-            </button>
+            {pr.liveLink ? (
+              // If already deployed, show preview button and stop button
+              <div className="flex gap-1">
+                <button
+                  onClick={() => toggleTab('preview')}
+                  className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
+                    activeTab === 'preview'
+                      ? 'bg-foreground text-background border-foreground'
+                      : 'text-muted-foreground hover:text-foreground border-foreground/20'
+                  }`}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Preview
+                </button>
+                <button
+                  onClick={handleStopDeployment}
+                  disabled={isDeploying}
+                  className="flex items-center gap-1 text-[10px] uppercase px-2 py-1 border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors disabled:opacity-50"
+                  title="Stop deployment"
+                >
+                  <Square className="h-3 w-3" />
+                  Stop
+                </button>
+              </div>
+            ) : (
+              // If not deployed, show deploy button
+              <button
+                onClick={handleDeploy}
+                disabled={isDeploying}
+                className="flex items-center gap-1 text-[10px] uppercase px-2 py-1 border border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors disabled:opacity-50"
+                title="Deploy this branch"
+              >
+                <Play className="h-3 w-3" />
+                {isDeploying ? 'Deploying...' : 'Deploy'}
+              </button>
+            )}
             <button
               onClick={() => toggleTab('logs')}
               className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
@@ -212,22 +275,52 @@ export function PullRequestCard({
               
               {/* Preview Content */}
               {activeTab === 'preview' && (
-                <div className="text-xs">
+                <div className="text-xs space-y-2">
                   {pr.liveLink ? (
-                    <div className="flex items-center gap-2">
-                      <span>Live preview available at:</span>
-                      <a
-                        href={pr.liveLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 hover:underline font-medium text-blue-600 dark:text-blue-400"
-                      >
-                        {pr.liveLink}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span>Live preview available at:</span>
+                        <a
+                          href={pr.liveLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 hover:underline font-medium text-blue-600 dark:text-blue-400"
+                        >
+                          {pr.liveLink}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                      {pr.sshLink && (
+                        <div className="flex items-center gap-2">
+                          <span>SSH access:</span>
+                          <code className="text-xs bg-secondary px-2 py-1 rounded font-mono">
+                            {pr.sshLink}
+                          </code>
+                        </div>
+                      )}
+                      <div className="text-green-600 dark:text-green-400 text-xs">
+                        ✅ Branch "{pr.branchName}" is deployed and running
+                      </div>
                     </div>
                   ) : (
-                    <span className="text-muted-foreground">No preview available</span>
+                    <div className="space-y-2">
+                      <span className="text-muted-foreground">
+                        No deployment active for this branch.
+                      </span>
+                      <div className="text-xs text-muted-foreground">
+                        Click "Deploy" to launch a VM for branch "{pr.branchName}"
+                      </div>
+                    </div>
+                  )}
+                  {deploymentError && (
+                    <div className="text-red-600 dark:text-red-400 text-xs bg-red-50 dark:bg-red-950 p-2 rounded">
+                      ❌ {deploymentError}
+                    </div>
+                  )}
+                  {isDeploying && (
+                    <div className="text-blue-600 dark:text-blue-400 text-xs bg-blue-50 dark:bg-blue-950 p-2 rounded">
+                      🚀 Deploying branch "{pr.branchName}"...
+                    </div>
                   )}
                 </div>
               )}

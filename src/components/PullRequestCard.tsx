@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { 
   GitBranch, Copy, Check, Clock, ExternalLink, FileText, 
-  MessageSquare, Files, History, Plus, Minus 
+  MessageSquare, Files, History, Plus, Minus, Loader2, AlertCircle, Play
 } from 'lucide-react'
 import { PullRequest } from '@/types/github'
 import { getStatusColor, formatRelativeTime, calculateFileChanges } from '@/utils/github.utils'
+import { apiConfig, getApiUrl } from '@/config/api.config'
 
 export interface PullRequestCardProps {
   pullRequest: PullRequest
@@ -17,6 +18,8 @@ export interface PullRequestCardProps {
   onScrollToIssue?: (issueId: string) => void
   className?: string
 }
+
+type DeploymentStatus = 'idle' | 'deploying' | 'deployed' | 'failed'
 
 export function PullRequestCard({
   pullRequest: pr,
@@ -28,6 +31,9 @@ export function PullRequestCard({
 }: PullRequestCardProps) {
   const [activeTab, setActiveTab] = useState<'description' | 'files' | 'history' | 'preview' | 'logs' | null>(null)
   const [copiedBranch, setCopiedBranch] = useState(false)
+  const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatus>('idle')
+  const [deploymentError, setDeploymentError] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(pr.liveLink || null)
   
   const fileStats = calculateFileChanges(pr.fileChanges)
   
@@ -45,6 +51,53 @@ export function PullRequestCard({
     if (onStatusChange && pr.status !== 'merged') {
       // The parent component should handle the actual status cycling logic
       onStatusChange(pr.status)
+    }
+  }
+
+  // Deploy VM for this specific branch
+  const deployPreview = async () => {
+    if (deploymentStatus === 'deploying' || deploymentStatus === 'deployed') {
+      return // Prevent multiple deployments
+    }
+
+    setDeploymentStatus('deploying')
+    setDeploymentError(null)
+
+    try {
+      // Extract repository info from PR data
+      // Assuming pr has repository info or we can parse it from context
+      const repoMatch = pr.id.match(/pr-(.+?)\/(.+?)-(\d+)/)
+      if (!repoMatch) {
+        throw new Error('Could not parse repository information')
+      }
+      
+      const [, owner, repo, prNumber] = repoMatch
+      
+      const response = await fetch(getApiUrl(apiConfig.endpoints.deployPreview(owner, repo, prNumber)), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          branchName: pr.branchName
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to deploy preview')
+      }
+
+      const data = await response.json()
+      setPreviewUrl(data.previewUrl)
+      setDeploymentStatus('deployed')
+      
+      // Update the PR's liveLink (this would ideally be handled by a state update from parent)
+      pr.liveLink = data.previewUrl
+    } catch (error) {
+      console.error('Deployment failed:', error)
+      setDeploymentStatus('failed')
+      setDeploymentError(error instanceof Error ? error.message : 'Unknown error occurred')
     }
   }
   
@@ -145,10 +198,12 @@ export function PullRequestCard({
                   ? 'bg-foreground text-background border-foreground'
                   : 'text-muted-foreground hover:text-foreground border-foreground/20'
               }`}
-              disabled={!pr.liveLink}
             >
               <ExternalLink className="h-3 w-3" />
               Preview
+              {deploymentStatus === 'deployed' && (
+                <Check className="h-3 w-3 text-green-600" />
+              )}
             </button>
             <button
               onClick={() => toggleTab('logs')}
@@ -212,22 +267,70 @@ export function PullRequestCard({
               
               {/* Preview Content */}
               {activeTab === 'preview' && (
-                <div className="text-xs">
-                  {pr.liveLink ? (
-                    <div className="flex items-center gap-2">
-                      <span>Live preview available at:</span>
-                      <a
-                        href={pr.liveLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 hover:underline font-medium text-blue-600 dark:text-blue-400"
+                <div className="text-xs space-y-3">
+                  {deploymentStatus === 'idle' && !previewUrl && (
+                    <div className="space-y-3">
+                      <p className="text-muted-foreground">No preview deployed yet for this branch.</p>
+                      <button
+                        onClick={deployPreview}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs font-medium"
                       >
-                        {pr.liveLink}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                        <Play className="h-3 w-3" />
+                        Deploy Preview for {pr.branchName}
+                      </button>
                     </div>
-                  ) : (
-                    <span className="text-muted-foreground">No preview available</span>
+                  )}
+                  
+                  {deploymentStatus === 'deploying' && (
+                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Deploying VM for branch {pr.branchName}...</span>
+                    </div>
+                  )}
+                  
+                  {deploymentStatus === 'failed' && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                        <AlertCircle className="h-3 w-3" />
+                        <span>Deployment failed</span>
+                      </div>
+                      {deploymentError && (
+                        <p className="text-xs text-muted-foreground">{deploymentError}</p>
+                      )}
+                      <button
+                        onClick={deployPreview}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs font-medium"
+                      >
+                        <Play className="h-3 w-3" />
+                        Retry Deployment
+                      </button>
+                    </div>
+                  )}
+                  
+                  {(deploymentStatus === 'deployed' || previewUrl) && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span>Live preview available at:</span>
+                        <a
+                          href={previewUrl!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 hover:underline font-medium text-blue-600 dark:text-blue-400"
+                        >
+                          {previewUrl}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                      {deploymentStatus === 'idle' && previewUrl && (
+                        <button
+                          onClick={deployPreview}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors text-xs font-medium"
+                        >
+                          <Play className="h-3 w-3" />
+                          Redeploy Preview
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

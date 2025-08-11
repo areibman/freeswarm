@@ -146,4 +146,24 @@ export class WebSocketService {
       timestamp: new Date().toISOString(),
     });
   }
+
+  // Broadcast deployment updates
+  public broadcastDeployment(data: {
+    prNumber: string | number;
+    branchName: string;
+    repository: string;
+    status: 'deploying' | 'deployed' | 'failed';
+    previewUrl?: string;
+    error?: string;
+  }) {
+    this.io.to(`repo:${data.repository}`).emit('deployment:update', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // Generic broadcast method
+  public broadcast(data: any) {
+    this.io.emit('broadcast', data);
+  }
 }

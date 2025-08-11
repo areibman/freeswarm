@@ -152,6 +152,166 @@ export class PullRequestsController {
     }
   }
 
+  // Deploy VM for a specific pull request branch
+  async deployPreview(req: Request, res: Response) {
+    try {
+      const { owner, repo, prNumber } = req.params;
+      const { branchName } = req.body;
+
+      if (!branchName) {
+        return res.status(400).json({ error: 'Branch name is required' });
+      }
+
+      const prId = `pr-${owner}/${repo}-${prNumber}`;
+
+      // Check if there's already an active deployment for this PR
+      const existingDeployment = await new Promise<any>((resolve, reject) => {
+        db.get(
+          `SELECT * FROM deployments 
+           WHERE pr_id = ? AND status IN ('deploying', 'deployed')
+           ORDER BY created_at DESC 
+           LIMIT 1`,
+          [prId],
+          (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          }
+        );
+      });
+
+      if (existingDeployment) {
+        if (existingDeployment.status === 'deploying') {
+          return res.status(409).json({ 
+            error: 'Deployment already in progress',
+            message: `A deployment is already in progress for branch ${branchName}`
+          });
+        }
+        if (existingDeployment.status === 'deployed') {
+          // Return existing deployment info
+          return res.json({
+            success: true,
+            deploymentId: existingDeployment.id,
+            previewUrl: existingDeployment.preview_url,
+            status: 'deployed',
+            message: `VM already deployed for branch ${branchName}`,
+            existing: true
+          });
+        }
+      }
+
+      // Generate a unique deployment ID
+      const deploymentId = `deploy-${owner}-${repo}-${prNumber}-${Date.now()}`;
+      
+      // Store deployment status in database
+      db.run(
+        `INSERT INTO deployments (id, pr_id, branch_name, status, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [deploymentId, prId, branchName, 'deploying', new Date().toISOString()]
+      );
+
+      // Broadcast deploying status
+      if (this.wsService) {
+        this.wsService.broadcastDeployment({
+          prNumber,
+          branchName,
+          repository: `${owner}/${repo}`,
+          status: 'deploying'
+        });
+      }
+
+      // Simulate VM deployment (replace with actual deployment logic)
+      // In a real implementation, this would trigger your VM provisioning service
+      setTimeout(() => {
+        const previewUrl = `https://preview-${prNumber}.${repo}.example.com`;
+        
+        // Update deployment record
+        db.run(
+          `UPDATE deployments 
+           SET status = ?, preview_url = ?, updated_at = ?
+           WHERE id = ?`,
+          ['deployed', previewUrl, new Date().toISOString(), deploymentId]
+        );
+
+        // Update PR with preview link
+        db.run(
+          `UPDATE pull_requests 
+           SET live_link = ?, deployment_status = ?
+           WHERE repository_id = ? AND number = ?`,
+          [previewUrl, 'deployed', `${owner}/${repo}`, prNumber]
+        );
+
+        // Broadcast deployment complete
+        if (this.wsService) {
+          this.wsService.broadcastDeployment({
+            prNumber,
+            branchName,
+            repository: `${owner}/${repo}`,
+            status: 'deployed',
+            previewUrl
+          });
+        }
+      }, 5000); // Simulate 5 second deployment time
+
+      res.json({
+        success: true,
+        deploymentId,
+        status: 'deploying',
+        message: `VM deployment started for branch ${branchName}`
+      });
+
+    } catch (error) {
+      console.error('Error deploying preview:', error);
+      
+      // Broadcast deployment failure
+      if (this.wsService) {
+        const { owner, repo, prNumber } = req.params;
+        const { branchName } = req.body;
+        this.wsService.broadcastDeployment({
+          prNumber,
+          branchName,
+          repository: `${owner}/${repo}`,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+
+      res.status(500).json({ 
+        error: 'Failed to deploy preview',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // Get deployment status for a pull request
+  async getDeploymentStatus(req: Request, res: Response) {
+    try {
+      const { owner, repo, prNumber } = req.params;
+      
+      const deployment = await new Promise<any>((resolve, reject) => {
+        db.get(
+          `SELECT * FROM deployments 
+           WHERE pr_id = ? 
+           ORDER BY created_at DESC 
+           LIMIT 1`,
+          [`pr-${owner}/${repo}-${prNumber}`],
+          (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          }
+        );
+      });
+
+      if (!deployment) {
+        return res.status(404).json({ error: 'No deployment found' });
+      }
+
+      res.json(deployment);
+    } catch (error) {
+      console.error('Error fetching deployment status:', error);
+      res.status(500).json({ error: 'Failed to fetch deployment status' });
+    }
+  }
+
   // Get cached pull requests (offline mode)
   async getCachedPullRequests(req: Request, res: Response) {
     try {

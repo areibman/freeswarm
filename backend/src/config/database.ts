@@ -122,6 +122,21 @@ export const initDatabase = () => {
       )
     `);
 
+    // Deployments table for tracking VM deployments
+    db.run(`
+      CREATE TABLE IF NOT EXISTS deployments (
+        id TEXT PRIMARY KEY,
+        pr_id TEXT,
+        branch_name TEXT,
+        status TEXT,
+        preview_url TEXT,
+        error_message TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+      )
+    `);
+
     console.log('Database tables initialized');
   });
 };

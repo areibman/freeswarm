@@ -6,6 +6,7 @@ import { MockGitHubService, mockPullRequestsData } from '@/services/mock-github.
 import { GitHubAPIService } from '@/services/github.service'
 import { useGitHubData, UseGitHubDataReturn } from '@/hooks/useGitHubData'
 import { Issue, PullRequest } from '@/types/github'
+import { useDeployment } from '@/hooks/useDeployment'
 
 export interface GitHubConfig {
   mode: 'mock' | 'api'
@@ -36,6 +37,14 @@ interface GitHubContextValue {
   deletePullRequests: (prIds: string[]) => Promise<void>
   refetch: () => Promise<void>
   
+  // Deployment properties
+  deployBranch: (prId: string) => Promise<string>
+  stopDeployment: (branchName: string) => Promise<void>
+  isDeploying: (branchName: string) => boolean
+  isReady: (branchName: string) => boolean
+  hasError: (branchName: string) => boolean
+  getError: (branchName: string) => string | undefined
+  
   // Context-specific properties
   config: GitHubConfig
   service: GitHubService
@@ -59,6 +68,9 @@ export function GitHubProvider({
     }
     return new MockGitHubService()
   }, [config.mode, config.apiConfig])
+  
+  // Initialize deployment hook
+  const deployment = useDeployment()
   
   // State for mock mode - initialize with data immediately if in mock mode
   const [mockPullRequests, setMockPullRequests] = useState<PullRequest[]>(
@@ -202,6 +214,26 @@ export function GitHubProvider({
     }
   }, [config.mode, service, refresh])
   
+  // Create wrapper for deployBranch
+  const deployBranch = useMemo(() => async (prId: string): Promise<string> => {
+    if (config.mode === 'mock') {
+      const mockService = service as MockGitHubService
+      const previewUrl = await mockService.deployBranch(prId)
+      // Update the PR with the live link
+      setMockPullRequests(prev => prev.map(pr => 
+        pr.id === prId ? { ...pr, liveLink: previewUrl } : pr
+      ))
+      return previewUrl
+    } else {
+      // For API mode, find the PR and deploy it
+      const pr = pullRequests.find(p => p.id === prId)
+      if (!pr) {
+        throw new Error('Pull request not found')
+      }
+      return await deployment.deployBranch(pr)
+    }
+  }, [config.mode, service, pullRequests, deployment])
+  
   const value: GitHubContextValue = {
     // Original properties
     pullRequests,
@@ -218,6 +250,14 @@ export function GitHubProvider({
     updatePullRequestStatus,
     deletePullRequests,
     refetch: refresh, // Alias for refresh
+    
+    // Deployment properties
+    deployBranch,
+    stopDeployment: deployment.stopDeployment,
+    isDeploying: deployment.isDeploying,
+    isReady: deployment.isReady,
+    hasError: deployment.hasError,
+    getError: deployment.getError,
     
     // Context-specific properties
     config,

@@ -1,5 +1,6 @@
 import { BaseGitHubService } from './github.service'
 import { PullRequest, Issue, Repository, UpdateLog } from '@/types/github'
+import { deploymentService } from './deployment.service'
 
 // Mock pull requests data
 export const mockPullRequestsData: PullRequest[] = [
@@ -10,7 +11,7 @@ export const mockPullRequestsData: PullRequest[] = [
       repository: { owner: 'areibman', name: 'freeswarm-sample-app' },
       author: { login: 'areibman' },
       branchName: 'codex/enhance-game-with-3d-soundboard-features',
-      liveLink: '',
+      liveLink: 'https://preview.freeswarm.dev/preview/codex-enhance-game-with-3d-soundboard-features',
       sshLink: '',
       model: 'ChatGPT task',
       sourceAgent: 'Codex',
@@ -277,6 +278,28 @@ export class MockGitHubService extends BaseGitHubService {
     this.mockPullRequests[prIndex] = updatedPR
     
     return updatedPR
+  }
+
+  async deployBranch(prId: string): Promise<string> {
+    const pr = this.mockPullRequests.find(pr => pr.id === prId)
+    
+    if (!pr) {
+      throw new Error(`Pull request ${prId} not found`)
+    }
+    
+    // Deploy the branch and get the preview URL
+    const previewUrl = await deploymentService.deployBranch(pr)
+    
+    // Update the PR with the live link
+    const prIndex = this.mockPullRequests.findIndex(p => p.id === prId)
+    if (prIndex !== -1) {
+      this.mockPullRequests[prIndex] = {
+        ...this.mockPullRequests[prIndex],
+        liveLink: previewUrl
+      }
+    }
+    
+    return previewUrl
   }
 
   async linkPullRequestToIssue(prId: string, issueId: string): Promise<void> {

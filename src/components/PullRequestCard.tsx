@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { 
   GitBranch, Copy, Check, Clock, ExternalLink, FileText, 
-  MessageSquare, Files, History, Plus, Minus 
+  MessageSquare, Files, History, Plus, Minus, Play, Square, Loader2
 } from 'lucide-react'
 import { PullRequest } from '@/types/github'
 import { getStatusColor, formatRelativeTime, calculateFileChanges } from '@/utils/github.utils'
+import { useGitHub } from '@/contexts/GitHubContext'
 
 export interface PullRequestCardProps {
   pullRequest: PullRequest
@@ -28,6 +29,9 @@ export function PullRequestCard({
 }: PullRequestCardProps) {
   const [activeTab, setActiveTab] = useState<'description' | 'files' | 'history' | 'preview' | 'logs' | null>(null)
   const [copiedBranch, setCopiedBranch] = useState(false)
+  const [deploying, setDeploying] = useState(false)
+  
+  const { deployBranch, stopDeployment, isDeploying, isReady, hasError, getError } = useGitHub()
   
   const fileStats = calculateFileChanges(pr.fileChanges)
   
@@ -39,6 +43,26 @@ export function PullRequestCard({
   
   const toggleTab = (tab: 'description' | 'files' | 'history' | 'preview' | 'logs') => {
     setActiveTab(current => current === tab ? null : tab)
+  }
+  
+  const handleDeploy = async () => {
+    try {
+      setDeploying(true)
+      await deployBranch(pr.id)
+      // The liveLink will be updated automatically through the context
+    } catch (error) {
+      console.error('Failed to deploy branch:', error)
+    } finally {
+      setDeploying(false)
+    }
+  }
+  
+  const handleStopDeployment = async () => {
+    try {
+      await stopDeployment(pr.branchName)
+    } catch (error) {
+      console.error('Failed to stop deployment:', error)
+    }
   }
   
   const handleStatusClick = () => {
@@ -145,11 +169,41 @@ export function PullRequestCard({
                   ? 'bg-foreground text-background border-foreground'
                   : 'text-muted-foreground hover:text-foreground border-foreground/20'
               }`}
-              disabled={!pr.liveLink}
             >
               <ExternalLink className="h-3 w-3" />
               Preview
             </button>
+            <button
+              onClick={handleDeploy}
+              disabled={deploying || isDeploying(pr.branchName) || isReady(pr.branchName)}
+              className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
+                isReady(pr.branchName)
+                  ? 'bg-green-600 text-white border-green-600'
+                  : isDeploying(pr.branchName) || deploying
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : hasError(pr.branchName)
+                  ? 'bg-red-600 text-white border-red-600'
+                  : 'text-muted-foreground hover:text-foreground border-foreground/20'
+              }`}
+            >
+              {isDeploying(pr.branchName) || deploying ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isReady(pr.branchName) ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+              {isReady(pr.branchName) ? 'Ready' : isDeploying(pr.branchName) || deploying ? 'Deploying' : 'Deploy'}
+            </button>
+            {isReady(pr.branchName) && (
+              <button
+                onClick={handleStopDeployment}
+                className="flex items-center gap-1 text-[10px] uppercase px-2 py-1 border border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition-colors"
+              >
+                <Square className="h-3 w-3" />
+                Stop
+              </button>
+            )}
             <button
               onClick={() => toggleTab('logs')}
               className={`flex items-center gap-1 text-[10px] uppercase px-2 py-1 border transition-colors ${
@@ -213,7 +267,17 @@ export function PullRequestCard({
               {/* Preview Content */}
               {activeTab === 'preview' && (
                 <div className="text-xs">
-                  {pr.liveLink ? (
+                  {isDeploying(pr.branchName) ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Deploying branch to VM...</span>
+                    </div>
+                  ) : hasError(pr.branchName) ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-red-600">Deployment failed:</span>
+                      <span className="text-red-600">{getError(pr.branchName)}</span>
+                    </div>
+                  ) : isReady(pr.branchName) ? (
                     <div className="flex items-center gap-2">
                       <span>Live preview available at:</span>
                       <a
@@ -227,7 +291,9 @@ export function PullRequestCard({
                       </a>
                     </div>
                   ) : (
-                    <span className="text-muted-foreground">No preview available</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Click "Deploy" to launch VM for this branch</span>
+                    </div>
                   )}
                 </div>
               )}
